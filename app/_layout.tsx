@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { supabase } from "../supabaseClient";
 
 export default function RootLayout() {
@@ -9,6 +9,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     const checkSession = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -29,17 +31,8 @@ export default function RootLayout() {
 
   if (loading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "#1A1A2E",
-        }}
-      >
-        <Text style={{ fontSize: 32, fontWeight: "bold", color: "#FFD700" }}>
-          Trade Spark
-        </Text>
+      <View style={styles.splashContainer}>
+        <Text style={styles.title}>Trade Spark</Text>
         <ActivityIndicator
           size="large"
           color="#FFD700"
@@ -52,10 +45,24 @@ export default function RootLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       {isLoggedIn ? (
-        <Stack.Screen name="(tabs)" /> // ✅ Redirect to Tabs layout
+        <Stack.Screen name="(tabs)" /> // Logged in
       ) : (
-        <Stack.Screen name="(auth)" /> // ✅ Redirect to Auth stack
+        <Stack.Screen name="(auth)" /> // Not logged in
       )}
     </Stack>
   );
 }
+
+const styles = StyleSheet.create({
+  splashContainer: {
+    flex: 1,
+    backgroundColor: "#1A1A2E",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#FFD700",
+  },
+});

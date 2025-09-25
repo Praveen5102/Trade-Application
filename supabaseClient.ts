@@ -1,6 +1,8 @@
 // supabaseClient.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import "react-native-url-polyfill/auto";
+import "react-native-get-random-values";
 
 // Replace with your actual Supabase credentials
 const SUPABASE_URL = "https://rvvcjaheldcyrlcbmwpm.supabase.co";

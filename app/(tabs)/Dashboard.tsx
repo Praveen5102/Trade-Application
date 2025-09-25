@@ -15,45 +15,72 @@ import { supabase } from "../../supabaseClient";
 export default function Dashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [tradeAmount, setTradeAmount] = useState("");
   const [code, setCode] = useState("");
+  const [walletBalance, setWalletBalance] = useState(0);
 
-  // Check user session on mount
+  // Fetch user and wallet info
   useEffect(() => {
-    const checkSession = async () => {
+    const fetchUser = async () => {
       const {
         data: { session },
+        error,
       } = await supabase.auth.getSession();
 
-      if (session?.user) {
-        setUserEmail(session.user.email ?? null);
-      } else {
+      if (error || !session?.user) {
         router.replace("/(auth)/signin");
+        return;
       }
+
+      setUser(session.user);
+      // Fetch wallet balance from Supabase (replace 'wallet' table/column as needed)
+      const { data: walletData, error: walletError } = await supabase
+        .from("wallets")
+        .select("balance")
+        .eq("user_id", session.user.id)
+        .single();
+
+      if (walletError) {
+        Alert.alert("Error", walletError.message);
+      } else {
+        setWalletBalance(walletData?.balance || 0);
+      }
+
       setLoading(false);
     };
 
-    checkSession();
+    fetchUser();
   }, []);
 
   // Trade handler
-  const handleTrade = () => {
-    if (!tradeAmount) {
-      Alert.alert("Error", "Please enter a trade amount.");
+  const handleTrade = async () => {
+    const amount = parseFloat(tradeAmount);
+    if (!tradeAmount || isNaN(amount)) {
+      Alert.alert("Error", "Please enter a valid trade amount.");
       return;
     }
-    Alert.alert("Success", `Trade executed: ${tradeAmount}`);
+
+    if (amount > walletBalance) {
+      Alert.alert("Error", "Insufficient balance.");
+      return;
+    }
+
+    // TODO: Call API or Supabase function to execute trade
+    setWalletBalance(walletBalance - amount);
+    Alert.alert("Success", `Trade executed: $${amount.toFixed(2)}`);
     setTradeAmount("");
   };
 
   // Apply code handler
-  const handleApplyCode = () => {
-    if (!code) {
+  const handleApplyCode = async () => {
+    if (!code.trim()) {
       Alert.alert("Error", "Please enter a code.");
       return;
     }
-    Alert.alert("Success", `Applied code: ${code}`);
+
+    // TODO: Validate code via Supabase or API
+    Alert.alert("Success", `Code applied: ${code}`);
     setCode("");
   };
 
@@ -75,12 +102,18 @@ export default function Dashboard() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Wallet</Text>
         <View style={styles.card}>
-          <Text style={styles.amountText}>$12,345.67 USD</Text>
+          <Text style={styles.amountText}>${walletBalance.toFixed(2)}</Text>
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => Alert.alert("Deposit", "Deposit flow here")}
+            >
               <Text style={styles.actionButtonText}>Deposit</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => Alert.alert("Withdraw", "Withdraw flow here")}
+            >
               <Text style={styles.actionButtonText}>Withdraw</Text>
             </TouchableOpacity>
           </View>
@@ -98,9 +131,11 @@ export default function Dashboard() {
             onChangeText={setTradeAmount}
             keyboardType="numeric"
           />
-          <Text style={styles.balanceText}>Available Balance: $12,345.67</Text>
+          <Text style={styles.balanceText}>
+            Available Balance: ${walletBalance.toFixed(2)}
+          </Text>
           <TouchableOpacity style={styles.tradeButton} onPress={handleTrade}>
-            <Text style={styles.tradeButtonText}>Execute Trade</Text>
+            <Text style={styles.tradeButtonText}>Trade</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -1,21 +1,55 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { supabase } from "../../supabaseClient";
+
+interface HistoryItem {
+  id: string;
+  type: string;
+  amount: number;
+  status: string;
+  date: string;
+}
 
 export default function Profile() {
   const router = useRouter();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [name, setName] = useState("John Doe");
-  const [mobile, setMobile] = useState("+91-9848227185");
-  const [referralCode, setReferralCode] = useState("TRADESPARK123");
+  const [user, setUser] = useState<any>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
     const fetchUser = async () => {
-      const { data } = await supabase.auth.getSession();
-      setUserEmail(data.session?.user.email ?? "");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace("/(auth)/signin");
+        return;
+      }
+      setUser(session.user);
+
+      // Fetch history (replace 'transactions' table with your table)
+      const { data: historyData, error } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("date", { ascending: false });
+
+      if (error) {
+        Alert.alert("Error", error.message);
+      } else {
+        setHistory(historyData || []);
+      }
     };
+
     fetchUser();
   }, []);
 
@@ -24,90 +58,77 @@ export default function Profile() {
     router.replace("/(auth)/signin");
   };
 
-  const handleEdit = () => {
-    // Add edit functionality here
-    console.log("Edit button pressed");
-  };
-
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 30 }}
+    >
       <View style={styles.profileSection}>
         <Ionicons
           name="person-circle"
-          size={60}
+          size={80}
           color="#ccc"
           style={styles.profileIcon}
         />
-        <Text style={styles.sectionTitle}>{userEmail}</Text>
+        <Text style={styles.emailText}>{user?.email}</Text>
+
         <View style={styles.infoCard}>
           <Text style={styles.cardTitle}>Basic Information</Text>
           <View style={styles.infoRow}>
             <Text style={styles.label}>Name:</Text>
-            <Text style={styles.value}>{name}</Text>
+            <Text style={styles.value}>
+              {user?.user_metadata?.full_name || "John Doe"}
+            </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.label}>Mobile:</Text>
-            <Text style={styles.value}>{mobile}</Text>
+            <Text style={styles.value}>
+              {user?.user_metadata?.phone || "+91-0000000000"}
+            </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.label}>Referral Code:</Text>
-            <Text style={styles.value}>{referralCode}</Text>
+            <Text style={styles.value}>
+              {user?.user_metadata?.referral || "TRADESPARK123"}
+            </Text>
           </View>
-          <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
-            <Text style={styles.editButtonText}>Edit</Text>
-          </TouchableOpacity>
         </View>
-        <View style={styles.historySection}>
-          <TouchableOpacity style={styles.historyItem}>
-            <Ionicons name="document-text" size={20} color="#ccc" />
-            <Text style={styles.historyText}>Deposits History</Text>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.historyItem}>
-            <Ionicons name="document-text" size={20} color="#ccc" />
-            <Text style={styles.historyText}>Withdrawals History</Text>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.historyItem}>
-            <Ionicons name="document-text" size={20} color="#ccc" />
-            <Text style={styles.historyText}>Trades History</Text>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-        </View>
+
+        {/* History Sections */}
+        <Text style={styles.historyTitle}>History</Text>
+        {["Deposit", "Withdraw", "Trade"].map((type) => (
+          <View key={type} style={styles.historyCard}>
+            <Text style={styles.historyCardTitle}>{type}s</Text>
+            {history
+              .filter((item) => item.type.toLowerCase() === type.toLowerCase())
+              .slice(0, 3)
+              .map((item) => (
+                <View key={item.id} style={styles.historyRow}>
+                  <Text style={styles.historyText}>
+                    ${item.amount.toFixed(2)} | {item.status}
+                  </Text>
+                  <Text style={styles.dateText}>
+                    {new Date(item.date).toLocaleDateString()}
+                  </Text>
+                </View>
+              ))}
+          </View>
+        ))}
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButton}>Logout</Text>
-      </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#1A1A2E",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 15,
-    backgroundColor: "#0D0D1E",
-  },
-  headerText: {
+  container: { flex: 1, backgroundColor: "#1A1A2E", padding: 20 },
+  profileSection: { alignItems: "center" },
+  profileIcon: { marginBottom: 10 },
+  emailText: {
     color: "#FFD700",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  profileSection: {
-    padding: 20,
-    alignItems: "center",
-  },
-  profileIcon: {
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    color: "#fff",
     fontSize: 18,
     fontWeight: "600",
     marginBottom: 20,
@@ -118,11 +139,6 @@ const styles = StyleSheet.create({
     padding: 15,
     width: "100%",
     marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
   },
   cardTitle: {
     fontSize: 16,
@@ -135,54 +151,37 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 10,
   },
-  label: {
-    color: "#555",
-    fontSize: 14,
+  label: { color: "#555", fontSize: 14 },
+  value: { color: "#333", fontSize: 14 },
+  historyTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFD700",
+    marginBottom: 10,
+    alignSelf: "flex-start",
   },
-  value: {
-    color: "#333",
-    fontSize: 14,
-  },
-  editButton: {
-    backgroundColor: "#2563EB",
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  editButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  historySection: {
-    width: "100%",
-  },
-  historyItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#fff",
+  historyCard: {
+    backgroundColor: "#0D0D1E",
     borderRadius: 10,
     padding: 15,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    width: "100%",
+    marginBottom: 15,
   },
-  historyText: {
-    color: "#333",
-    fontSize: 16,
+  historyCardTitle: { color: "#FFD700", fontWeight: "bold", marginBottom: 10 },
+  historyRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 5,
   },
+  historyText: { color: "#fff" },
+  dateText: { color: "#ccc" },
   logoutButton: {
-    backgroundColor: "#a92828ff",
-    color: "#fff",
-    textAlign: "center",
-    fontSize: 18,
-    width: "80%",
-    padding: 8,
+    backgroundColor: "#a92828",
+    padding: 12,
     borderRadius: 10,
-    marginLeft: "10%",
+    marginTop: 20,
+    width: "80%",
+    alignItems: "center",
   },
+  logoutText: { color: "#fff", fontWeight: "600", fontSize: 16 },
 });

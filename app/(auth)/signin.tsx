@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Google from "expo-auth-session/providers/google";
 import { Link, useRouter } from "expo-router";
-import React, { useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -12,11 +14,49 @@ import {
 } from "react-native";
 import { supabase } from "../../supabaseClient";
 
+WebBrowser.maybeCompleteAuthSession();
+
 export default function SignIn() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // Google Auth Session
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    iosClientId:
+      "783926729709-aicrpppf7d7av0j2tea07angabhfm2fl.apps.googleusercontent.com",
+    androidClientId:
+      "783926729709-sgisflqjj7o8dllpnuh9n55vg28fnqip.apps.googleusercontent.com",
+    webClientId:
+      "783926729709-1k7tpg3dsbfmdpk7bn22ngg17pl0rr4o.apps.googleusercontent.com",
+  });
+
+  useEffect(() => {
+    const signInWithGoogle = async () => {
+      if (response?.type === "success") {
+        const { authentication } = response;
+
+        if (!authentication?.idToken) {
+          Alert.alert("Error", "No ID Token received from Google.");
+          return;
+        }
+
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: "google",
+          token: authentication.idToken,
+        });
+
+        if (error) {
+          Alert.alert("Error", error.message);
+        } else {
+          Alert.alert("Success", "Logged in with Google!");
+          router.replace("/(tabs)/Dashboard");
+        }
+      }
+    };
+    signInWithGoogle();
+  }, [response, router]); // ✅ Added router
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -32,7 +72,7 @@ export default function SignIn() {
     if (error) return Alert.alert("Error", error.message);
 
     Alert.alert("Success", "Logged in successfully!");
-    router.replace("/(tabs)/Dashboard"); // ✅ Correct path
+    router.replace("/(tabs)/Dashboard");
   };
 
   return (
@@ -72,19 +112,30 @@ export default function SignIn() {
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
+
       <Text style={styles.orText}>OR</Text>
-      <TouchableOpacity style={styles.socialButton} onPress={() => {}}>
-        <Ionicons name="call" size={20} color="#fff" />
-        <Text style={styles.socialButtonText}>Continue with Mobile Number</Text>
+
+      <TouchableOpacity style={styles.socialButton}>
+        <Link href="/(auth)/PhoneLogin">
+          <Ionicons name="call" size={20} color="#fff" />
+          <Text style={styles.socialButtonText}>
+            Continue with Mobile Number
+          </Text>
+        </Link>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.socialButton1} onPress={() => {}}>
+      <TouchableOpacity
+        style={styles.socialButton1}
+        disabled={!request}
+        onPress={() => promptAsync()}
+      >
         <Image
           source={require("@/assets/images/google.png")}
           style={styles.socialIcon}
         />
-        <Text style={styles.socialButtonText1}>Continue with Gmail </Text>
+        <Text style={styles.socialButtonText1}>Continue with Google</Text>
       </TouchableOpacity>
+
       <Text style={styles.footer}>
         Don’t have an account?{" "}
         <Link href="/(auth)/signup">
@@ -122,11 +173,6 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 15,
     fontSize: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   passwordContainer: {
     flexDirection: "row",
@@ -134,11 +180,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 10,
     marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   eyeIcon: { paddingHorizontal: 10 },
   button: {
@@ -146,11 +187,6 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
   },
   buttonText: {
     color: "#1A1A2E",
@@ -158,30 +194,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 18,
   },
-
   socialButton: {
     flexDirection: "row",
-    backgroundColor: "#1E40AF", // deeper blue for contrast
+    backgroundColor: "#1E40AF",
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
     marginBottom: 18,
     alignItems: "center",
     justifyContent: "center",
-
-    // Subtle shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
   },
   socialButtonText: {
-    color: "#F9FAFB", // softer white
+    color: "#fff",
     fontWeight: "700",
     marginLeft: 12,
     fontSize: 17,
-    letterSpacing: 0.5,
   },
   socialIcon: {
     width: 20,
@@ -190,34 +217,24 @@ const styles = StyleSheet.create({
   },
   socialButton1: {
     flexDirection: "row",
-    backgroundColor: "#fff", // deeper blue for contrast
+    backgroundColor: "#fff",
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
     marginBottom: 18,
     alignItems: "center",
     justifyContent: "center",
-
-    // Subtle shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
   },
   socialButtonText1: {
-    color: "#131314ff", // softer white
+    color: "#131314",
     fontWeight: "700",
     marginLeft: 12,
     fontSize: 17,
-    letterSpacing: 0.5,
   },
-
   orText: {
     textAlign: "center",
     color: "#E5E7EB",
     marginVertical: 15,
-    fontWeight: "500",
   },
   footer: {
     textAlign: "center",
