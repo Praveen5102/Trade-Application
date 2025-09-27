@@ -1,11 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Google from "expo-auth-session/providers/google";
 import { Link, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Alert,
-  Image,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../../supabaseClient";
+import GoogleSignInButton from "../components/Google-signin-in-button.web";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -21,58 +20,34 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Google Auth Session
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    iosClientId:
-      "783926729709-aicrpppf7d7av0j2tea07angabhfm2fl.apps.googleusercontent.com",
-    androidClientId:
-      "783926729709-sgisflqjj7o8dllpnuh9n55vg28fnqip.apps.googleusercontent.com",
-    webClientId:
-      "783926729709-1k7tpg3dsbfmdpk7bn22ngg17pl0rr4o.apps.googleusercontent.com",
-  });
-
-  useEffect(() => {
-    const signInWithGoogle = async () => {
-      if (response?.type === "success") {
-        const { authentication } = response;
-
-        if (!authentication?.idToken) {
-          Alert.alert("Error", "No ID Token received from Google.");
-          return;
-        }
-
-        const { error } = await supabase.auth.signInWithIdToken({
-          provider: "google",
-          token: authentication.idToken,
-        });
-
-        if (error) {
-          Alert.alert("Error", error.message);
-        } else {
-          Alert.alert("Success", "Logged in with Google!");
-          router.replace("/(tabs)/Dashboard");
-        }
-      }
-    };
-    signInWithGoogle();
-  }, [response, router]); // ✅ Added router
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Enter email and password!");
+      Alert.alert("Error", "Please enter both email and password!");
       return;
     }
 
+    setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) return Alert.alert("Error", error.message);
+    if (error) {
+      Alert.alert("Error", error.message);
+    } else {
+      Alert.alert("Success", "Logged in successfully!");
+      router.replace("/(tabs)/Dashboard");
+    }
+    setLoading(false);
+  };
 
-    Alert.alert("Success", "Logged in successfully!");
-    router.replace("/(tabs)/Dashboard");
+  const clearPassword = () => {
+    setPassword("");
+    setShowPassword(false);
   };
 
   return (
@@ -97,6 +72,14 @@ export default function SignIn() {
           value={password}
           onChangeText={setPassword}
         />
+        {password.length > 0 && (
+          <TouchableOpacity
+            onPress={clearPassword}
+            style={[styles.eyeIcon, { marginLeft: 5 }]}
+          >
+            <Ionicons name="close-circle" size={22} color="#555" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           onPress={() => setShowPassword(!showPassword)}
           style={styles.eyeIcon}
@@ -109,32 +92,28 @@ export default function SignIn() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? "Loading..." : "Login"}
+        </Text>
       </TouchableOpacity>
 
       <Text style={styles.orText}>OR</Text>
 
-      <TouchableOpacity style={styles.socialButton}>
-        <Link href="/(auth)/PhoneLogin">
-          <Ionicons name="call" size={20} color="#fff" />
-          <Text style={styles.socialButtonText}>
-            Continue with Mobile Number
-          </Text>
-        </Link>
+      <TouchableOpacity
+        style={styles.socialButton}
+        disabled={loading}
+        onPress={() => router.push("/(auth)/PhoneLogin")}
+      >
+        <Ionicons name="call" size={20} color="#fff" />
+        <Text style={styles.socialButtonText}>Continue with Mobile Number</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.socialButton1}
-        disabled={!request}
-        onPress={() => promptAsync()}
-      >
-        <Image
-          source={require("@/assets/images/google.png")}
-          style={styles.socialIcon}
-        />
-        <Text style={styles.socialButtonText1}>Continue with Google</Text>
-      </TouchableOpacity>
+      <GoogleSignInButton />
 
       <Text style={styles.footer}>
         Don’t have an account?{" "}
@@ -142,7 +121,6 @@ export default function SignIn() {
           <Text style={styles.link}>Sign Up</Text>
         </Link>
       </Text>
-      <Text style={styles.forgot}>Forgot Password?</Text>
     </View>
   );
 }

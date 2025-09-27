@@ -4,13 +4,13 @@
     "slug": "TradeApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/splash.jpg",
+    "icon": "./assets/images/favicon.png",
     "scheme": "tradeapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "jsEngine": "hermes",
     "splash": {
-      "image": "./assets/images/favicon.png",
+      "image": "./assets/images/splash.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#1A1A2E"
     },
@@ -18,15 +18,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.john1912.TradeApp",
       "splash": {
-        "image": "./assets/images/favicon.png",
+        "image": "./assets/images/splash.jpg",
         "resizeMode": "contain",
         "backgroundColor": "#1A1A2E",
         "dark": {
-          "image": "./assets/images/favicon.png",
+          "image": "./assets/images/splash.jpg",
           "resizeMode": "contain",
           "backgroundColor": "#1A1A2E"
         }
-      }
+      },
+      "associatedDomains": ["applinks:api.mytradeapp.com"]
     },
     "android": {
       "package": "com.john1912.TradeApp",
@@ -34,21 +35,31 @@
       "predictiveBackGestureEnabled": false,
       "useLegacyPackaging": false,
       "splash": {
-        "image": "./assets/images/favicon.png",
+        "image": "./assets/images/splash.jpg",
         "resizeMode": "contain",
         "backgroundColor": "#1A1A2E",
         "dark": {
-          "image": "./assets/images/favicon.png",
+          "image": "./assets/images/splash.jpg",
           "resizeMode": "contain",
           "backgroundColor": "#1A1A2E"
         }
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            { "scheme": "https", "host": "api.mytradeapp.com" },
+            { "scheme": "tradeapp" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png",
       "splash": {
-        "image": "./assets/images/favicon.png",
+        "image": "./assets/images/splash.jpg",
         "resizeMode": "contain",
         "backgroundColor": "#1A1A2E"
       }
@@ -64,13 +75,15 @@
             "enableShrinkResourcesInReleaseBuilds": true
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
+      "API_URL": "http://192.168.31.119:5000",
       "router": {},
       "iosClientId": "783926729709-aicrpppf7d7av0j2tea07angabhfm2fl.apps.googleusercontent.com",
       "androidClientId": "783926729709-sgisflqjj7o8dllpnuh9n55vg28fnqip.apps.googleusercontent.com",
