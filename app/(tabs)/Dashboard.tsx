@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { WebView } from "react-native-webview";
-import { supabase } from "../../supabaseClient";
+import { supabase } from "../lib/supabase";
 
 interface HistoryItem {
   id: string;

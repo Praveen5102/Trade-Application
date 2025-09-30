@@ -1,24 +1,8 @@
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { supabase } from "../supabaseClient";
-import { useAuthContext } from "./hooks/use-auth-context";
-import AuthProvider from "./providers/auth-provider";
-// Separate RootNavigator so we can access the AuthContext
-function RootNavigator() {
-  const { isLoggedIn } = useAuthContext();
-  return (
-    <Stack>
-      <Stack.Protected guard={isLoggedIn}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack.Protected>
-      <Stack.Protected guard={!isLoggedIn}>
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-      </Stack.Protected>
-      <Stack.Screen name="+not-found" />
-    </Stack>
-  );
-}
+import { supabase } from "./lib/supabase";
+
 export default function RootLayout() {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -60,14 +44,11 @@ export default function RootLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <AuthProvider>
-        <RootNavigator />
-        {isLoggedIn ? (
-          <Stack.Screen name="(tabs)" /> // Logged in
-        ) : (
-          <Stack.Screen name="(auth)" /> // Not logged in
-        )}
-      </AuthProvider>
+      {isLoggedIn ? (
+        <Stack.Screen name="(tabs)" /> // Logged in
+      ) : (
+        <Stack.Screen name="(auth)" /> // Not logged in
+      )}
     </Stack>
   );
 }

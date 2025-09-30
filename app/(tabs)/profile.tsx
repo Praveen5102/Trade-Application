@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { supabase } from "../../supabaseClient";
+import { supabase } from "../lib/supabase";
 
 interface ReferredUser {
   id: string;
@@ -30,6 +30,7 @@ export default function Profile() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [originalEmail, setOriginalEmail] = useState("");
   const [referralCode, setReferralCode] = useState<string>("");
   const [tempReferralCode, setTempReferralCode] = useState<string>("");
   const [referredCount, setReferredCount] = useState<number>(0);
@@ -56,7 +57,9 @@ export default function Profile() {
 
       const currentUser = sessionData.session.user;
       setUser(currentUser);
-      setEmail(currentUser.email || "");
+      const userEmail = currentUser.email || "";
+      setEmail(userEmail);
+      setOriginalEmail(userEmail);
 
       // Fetch user's detailed profile from users table
       const { data: userProfile, error: userProfileError } = await supabase
@@ -75,7 +78,8 @@ export default function Profile() {
         setUserId(userProfile.id);
         setFullName(userProfile.full_name || "");
         setPhone(userProfile.phone || "");
-        setEmail(userProfile.email || currentUser.email || "");
+        setEmail(userProfile.email || userEmail);
+        setOriginalEmail(userProfile.email || userEmail);
       }
 
       // Fetch referral information using the internal user ID
@@ -197,11 +201,10 @@ export default function Profile() {
         .from("referrals")
         .select("referral_code")
         .eq("referral_code", tempReferralCode)
-        .neq("user_id", userId) // Exclude the current user's referral
+        .neq("user_id", userId)
         .single();
 
       if (checkError && checkError.code !== "PGRST116") {
-        // PGRST116: No rows found
         console.error("Error checking referral code:", checkError);
         Alert.alert("Error", "Failed to validate referral code");
         return;
@@ -215,11 +218,19 @@ export default function Profile() {
 
     setLoading(true);
     try {
-      // Update auth metadata
-      const { error: authError } = await supabase.auth.updateUser({
-        email,
+      const emailChanged = email.toLowerCase() !== originalEmail.toLowerCase();
+
+      // Update auth user
+      const updateData: any = {
         data: { full_name: fullName, phone },
-      });
+      };
+
+      // Only add email if it changed
+      if (emailChanged) {
+        updateData.email = email.toLowerCase();
+      }
+
+      const { error: authError } = await supabase.auth.updateUser(updateData);
 
       if (authError) {
         Alert.alert("Error", authError.message);
@@ -260,8 +271,25 @@ export default function Profile() {
         setReferralCode(tempReferralCode);
       }
 
-      Alert.alert("Success", "Profile updated successfully!");
-      setIsEditing(false);
+      if (emailChanged) {
+        Alert.alert(
+          "Success",
+          "Profile updated! Please check your new email address to confirm the change. You'll need to verify the new email before it takes effect.",
+          [
+            {
+              text: "OK",
+              onPress: async () => {
+                await supabase.auth.signOut();
+                router.replace("/(auth)/signin");
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Success", "Profile updated successfully!");
+        setIsEditing(false);
+        setOriginalEmail(email.toLowerCase());
+      }
     } catch (err) {
       console.error("Profile update error:", err);
       Alert.alert("Error", "Failed to update profile.");
@@ -299,21 +327,62 @@ export default function Profile() {
             }
 
             setLoading(true);
-            const { error } = await supabase.rpc("delete_user", {
-              p_user_id: user.id,
-            });
 
-            if (error) {
-              Alert.alert(
-                "Error",
-                error.message || "Failed to delete account."
+            try {
+              // Step 1: Delete all user-related data from public schema
+              const { error: deleteDataError } = await supabase.rpc(
+                "delete_user_data",
+                {
+                  p_auth_id: user.id,
+                }
               );
-              setLoading(false);
-              return;
-            }
 
-            await supabase.auth.signOut();
-            router.replace("/(auth)/signin");
+              if (deleteDataError) {
+                console.error("Error deleting user data:", deleteDataError);
+                Alert.alert(
+                  "Error",
+                  "Failed to delete user data: " + deleteDataError.message
+                );
+                setLoading(false);
+                return;
+              }
+
+              // Step 2: Delete from auth.users using admin API
+              // This requires calling your backend endpoint or using service role
+              const { error: authDeleteError } = await supabase.rpc(
+                "delete_auth_user",
+                {
+                  user_id: user.id,
+                }
+              );
+
+              if (authDeleteError) {
+                console.error("Error deleting auth user:", authDeleteError);
+                Alert.alert(
+                  "Error",
+                  "Failed to delete account: " + authDeleteError.message
+                );
+                setLoading(false);
+                return;
+              }
+
+              // Step 3: Sign out and redirect
+              await supabase.auth.signOut();
+              Alert.alert(
+                "Account Deleted",
+                "Your account has been permanently deleted.",
+                [
+                  {
+                    text: "OK",
+                    onPress: () => router.replace("/(auth)/signin"),
+                  },
+                ]
+              );
+            } catch (error) {
+              console.error("Delete account error:", error);
+              Alert.alert("Error", "An unexpected error occurred.");
+              setLoading(false);
+            }
           },
         },
       ]
@@ -516,7 +585,7 @@ export default function Profile() {
               style={styles.cancelButton}
               onPress={() => {
                 setIsEditing(false);
-                setTempReferralCode(referralCode); // Reset temp referral code
+                setTempReferralCode(referralCode);
                 fetchProfile();
               }}
             >
@@ -528,7 +597,7 @@ export default function Profile() {
             style={styles.editButton}
             onPress={() => {
               setIsEditing(true);
-              setTempReferralCode(referralCode); // Initialize temp referral code
+              setTempReferralCode(referralCode);
             }}
           >
             <Text style={styles.actionText}>Edit Profile</Text>

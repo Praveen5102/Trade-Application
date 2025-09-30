@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "jsEngine": "hermes",
     "splash": {
-      "image": "./assets/images/splash.jpg",
+      "image": "./assets/images/favicon.png",
       "resizeMode": "contain",
       "backgroundColor": "#1A1A2E"
     },
@@ -18,11 +18,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.john1912.TradeApp",
       "splash": {
-        "image": "./assets/images/splash.jpg",
+        "image": "./assets/images/favicon.png",
         "resizeMode": "contain",
         "backgroundColor": "#1A1A2E",
         "dark": {
-          "image": "./assets/images/splash.jpg",
+          "image": "./assets/images/favicon.png",
           "resizeMode": "contain",
           "backgroundColor": "#1A1A2E"
         }
@@ -33,13 +33,12 @@
       "package": "com.john1912.TradeApp",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "useLegacyPackaging": false,
       "splash": {
-        "image": "./assets/images/splash.jpg",
+        "image": "./assets/images/favicon.png",
         "resizeMode": "contain",
         "backgroundColor": "#1A1A2E",
         "dark": {
-          "image": "./assets/images/splash.jpg",
+          "image": "./assets/images/favicon.png",
           "resizeMode": "contain",
           "backgroundColor": "#1A1A2E"
         }
@@ -59,7 +58,7 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png",
       "splash": {
-        "image": "./assets/images/splash.jpg",
+        "image": "./assets/images/favicon.png",
         "resizeMode": "contain",
         "backgroundColor": "#1A1A2E"
       }

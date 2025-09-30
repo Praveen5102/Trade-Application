@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { supabase } from "../../supabaseClient";
+import { supabase } from "../lib/supabase";
 
 export default function PhoneLogin() {
   const router = useRouter();
