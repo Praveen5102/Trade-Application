@@ -92,39 +92,8 @@ export default function Profile() {
         .single();
 
       if (refError || !refData) {
-        // Create if not exists (though trigger should handle)
-        const { error: createError } = await supabase.rpc(
-          "create_referral_for_user",
-          {
-            new_user: userProfile.id,
-          }
-        );
-
-        if (createError) {
-          console.error("Failed to create referral:", createError);
-          Alert.alert("Error", "Failed to create referral");
-          return;
-        }
-
-        // Fetch again
-        const { data: newRefData, error: newRefError } = await supabase
-          .from("referrals")
-          .select(
-            "referral_code, referred_count, points, total_rewards, earnings"
-          )
-          .eq("user_id", userProfile.id)
-          .single();
-
-        if (newRefError || !newRefData) {
-          Alert.alert("Error", "Failed to load referral data");
-          return;
-        }
-
-        setReferralCode(newRefData.referral_code || "");
-        setTempReferralCode(newRefData.referral_code || "");
-        setReferredCount(newRefData.referred_count || 0);
-        setPoints(newRefData.points || 0);
-        setTotalEarnings(newRefData.total_rewards || newRefData.earnings || 0);
+        Alert.alert("Error", "Failed to load referral data");
+        return;
       } else {
         setReferralCode(refData.referral_code || "");
         setTempReferralCode(refData.referral_code || "");
@@ -188,11 +157,8 @@ export default function Profile() {
 
     // Validate referral code
     if (isEditing && tempReferralCode) {
-      if (tempReferralCode.length < 3) {
-        Alert.alert(
-          "Error",
-          "Referral code must be at least 3 characters long"
-        );
+      if (tempReferralCode.length < 8) {
+        Alert.alert("Error", "Referral code must be exactly 8 characters");
         return;
       }
 
@@ -200,7 +166,7 @@ export default function Profile() {
       const { data: existingReferral, error: checkError } = await supabase
         .from("referrals")
         .select("referral_code")
-        .eq("referral_code", tempReferralCode)
+        .eq("referral_code", tempReferralCode.toUpperCase())
         .neq("user_id", userId)
         .single();
 
@@ -259,7 +225,7 @@ export default function Profile() {
       if (isEditing && tempReferralCode !== referralCode) {
         const { error: referralError } = await supabase
           .from("referrals")
-          .update({ referral_code: tempReferralCode })
+          .update({ referral_code: tempReferralCode.toUpperCase() })
           .eq("user_id", userId);
 
         if (referralError) {
@@ -268,7 +234,7 @@ export default function Profile() {
           setLoading(false);
           return;
         }
-        setReferralCode(tempReferralCode);
+        setReferralCode(tempReferralCode.toUpperCase());
       }
 
       if (emailChanged) {
@@ -329,45 +295,27 @@ export default function Profile() {
             setLoading(true);
 
             try {
-              // Step 1: Delete all user-related data from public schema
-              const { error: deleteDataError } = await supabase.rpc(
-                "delete_user_data",
+              // Call delete function via RPC
+              const { error: rpcError } = await supabase.rpc(
+                "delete_user_completely",
                 {
                   p_auth_id: user.id,
                 }
               );
 
-              if (deleteDataError) {
-                console.error("Error deleting user data:", deleteDataError);
+              if (rpcError) {
+                console.error("Error deleting user:", rpcError);
                 Alert.alert(
                   "Error",
-                  "Failed to delete user data: " + deleteDataError.message
+                  "Failed to delete account: " + rpcError.message
                 );
                 setLoading(false);
                 return;
               }
 
-              // Step 2: Delete from auth.users using admin API
-              // This requires calling your backend endpoint or using service role
-              const { error: authDeleteError } = await supabase.rpc(
-                "delete_auth_user",
-                {
-                  user_id: user.id,
-                }
-              );
-
-              if (authDeleteError) {
-                console.error("Error deleting auth user:", authDeleteError);
-                Alert.alert(
-                  "Error",
-                  "Failed to delete account: " + authDeleteError.message
-                );
-                setLoading(false);
-                return;
-              }
-
-              // Step 3: Sign out and redirect
+              // Sign out (session will be invalid anyway)
               await supabase.auth.signOut();
+
               Alert.alert(
                 "Account Deleted",
                 "Your account has been permanently deleted.",
@@ -440,6 +388,7 @@ export default function Profile() {
                 value={fullName}
                 onChangeText={setFullName}
                 placeholder="Enter your full name"
+                placeholderTextColor="#999"
               />
             ) : (
               <Text style={styles.value}>{fullName || "Not provided"}</Text>
@@ -456,6 +405,7 @@ export default function Profile() {
                 autoCapitalize="none"
                 keyboardType="email-address"
                 placeholder="Enter your email"
+                placeholderTextColor="#999"
               />
             ) : (
               <Text style={styles.value}>{email || "Not provided"}</Text>
@@ -471,6 +421,7 @@ export default function Profile() {
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
                 placeholder="Enter 10-digit phone number"
+                placeholderTextColor="#999"
                 maxLength={10}
               />
             ) : (
@@ -490,9 +441,13 @@ export default function Profile() {
                 <TextInput
                   style={styles.input}
                   value={tempReferralCode}
-                  onChangeText={setTempReferralCode}
-                  placeholder="Enter referral code"
-                  autoCapitalize="none"
+                  onChangeText={(text) =>
+                    setTempReferralCode(text.toUpperCase())
+                  }
+                  placeholder="8 characters"
+                  placeholderTextColor="#999"
+                  autoCapitalize="characters"
+                  maxLength={8}
                 />
               </View>
             ) : (

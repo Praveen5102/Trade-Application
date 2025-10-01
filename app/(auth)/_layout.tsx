@@ -6,6 +6,7 @@ export default function AuthLayout() {
       <Stack.Screen name="signin" />
       <Stack.Screen name="PhoneLogin" />
       <Stack.Screen name="signup" />
+      <Stack.Screen name="googleSignin" />
     </Stack>
   );
 }

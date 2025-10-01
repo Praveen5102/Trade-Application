@@ -1,6 +1,7 @@
+// app/(auth)/GoogleSignin.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,41 +14,56 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { supabase } from "../lib/supabase";
 
-export default function SignUp() {
+export default function GoogleSignin() {
   const router = useRouter();
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [referral, setReferral] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [authId, setAuthId] = useState("");
+
+  // Fetch user data on mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          setAuthId(user.id);
+          setEmail(user.email || "");
+          // Pre-fill name from Google metadata if available
+          setName(
+            user.user_metadata?.full_name || user.user_metadata?.name || ""
+          );
+        } else {
+          // No user found, redirect to signin
+          Alert.alert("Error", "No user session found. Please sign in again.");
+          router.replace("/(auth)/signin");
+        }
+      } catch (err: any) {
+        console.error("Error fetching user:", err);
+        Alert.alert("Error", "Failed to load user data.");
+        router.replace("/(auth)/signin");
+      }
+    };
+
+    fetchUserData();
+  }, [router]);
 
   const validateInputs = useCallback(() => {
-    if (!name || !email || !phone || !password || !confirmPassword) {
-      Alert.alert("Error", "All fields except referral code are required.");
-      return false;
-    }
-    if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match.");
-      return false;
-    }
-    if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters.");
+    if (!name || !phone || !referral) {
+      Alert.alert("Error", "All fields are required.");
       return false;
     }
     if (!/^\d{10}$/.test(phone)) {
       Alert.alert("Error", "Phone number must be exactly 10 digits.");
       return false;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      Alert.alert("Error", "Invalid email address.");
-      return false;
-    }
     return true;
-  }, [name, email, phone, password, confirmPassword]);
+  }, [name, phone, referral]);
 
   const findReferrer = useCallback(async (referralCode: string) => {
     if (!referralCode) return null;
@@ -55,7 +71,7 @@ export default function SignUp() {
     const normalized = referralCode.trim().toUpperCase();
 
     // Special test code that doesn't require actual user
-    if (normalized === "TEST2024") return null; // Return null to skip referrer linkage
+    if (normalized === "TEST2024") return null;
 
     try {
       const { data, error } = await supabase
@@ -76,26 +92,11 @@ export default function SignUp() {
     }
   }, []);
 
-  const handleSignUp = useCallback(async () => {
+  const handleContinue = useCallback(async () => {
     if (!validateInputs()) return;
     setLoading(true);
 
     try {
-      // Check if email already exists in users table
-      const { data: existingUser, error: emailCheckError } = await supabase
-        .from("users")
-        .select("email")
-        .eq("email", email.toLowerCase())
-        .maybeSingle();
-
-      if (emailCheckError && emailCheckError.code !== "PGRST116") {
-        throw new Error("Failed to check email availability.");
-      }
-      if (existingUser) {
-        Alert.alert("Error", "Email already in use.");
-        return;
-      }
-
       // Check if phone already exists
       const { data: existingPhone, error: phoneCheckError } = await supabase
         .from("users")
@@ -111,6 +112,7 @@ export default function SignUp() {
         return;
       }
 
+      // Validate referral code
       let referredBy: string | null = null;
       if (referral) {
         referredBy = await findReferrer(referral);
@@ -123,25 +125,25 @@ export default function SignUp() {
         }
       }
 
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.toLowerCase(),
-        password,
-        options: {
-          data: {
-            full_name: name.trim(),
-            phone,
-          },
-        },
-      });
+      // Check if user already exists in users table
+      const { data: existingUser, error: userCheckError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("auth_id", authId)
+        .maybeSingle();
 
-      if (authError) {
-        throw new Error(authError.message);
+      if (userCheckError && userCheckError.code !== "PGRST116") {
+        throw new Error("Failed to check user data.");
       }
 
-      const authId = authData.user?.id;
-      if (!authId) {
-        throw new Error("Failed to create account. Please try again.");
+      if (existingUser) {
+        // User already exists, just update and redirect
+        Alert.alert(
+          "Info",
+          "Your profile already exists. Redirecting to dashboard."
+        );
+        router.replace("/(tabs)/Dashboard");
+        return;
       }
 
       // Insert user - trigger will handle wallet, profile, referrals, and referral updates
@@ -156,14 +158,12 @@ export default function SignUp() {
       ]);
 
       if (insertError) {
-        // If user insert fails, clean up auth user
-        await supabase.auth.admin.deleteUser(authId);
         throw new Error(insertError.message);
       }
 
       Alert.alert(
         "Success",
-        "Account created successfully! Your unique referral code has been generated.",
+        "Profile completed successfully! Your unique referral code has been generated.",
         [
           {
             text: "Continue",
@@ -172,18 +172,21 @@ export default function SignUp() {
         ]
       );
     } catch (err: any) {
-      console.error("Signup error:", err);
-      Alert.alert("Error", err.message || "Signup failed. Please try again.");
+      console.error("Profile completion error:", err);
+      Alert.alert(
+        "Error",
+        err.message || "Failed to complete profile. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   }, [
     validateInputs,
     findReferrer,
+    authId,
     email,
     name,
     phone,
-    password,
     referral,
     router,
   ]);
@@ -197,18 +200,25 @@ export default function SignUp() {
     >
       <View style={styles.container}>
         <Text style={styles.title}>Trade Spark</Text>
-        <Text style={styles.subtitle}>Create Your Account</Text>
+        <Text style={styles.subtitle}>Complete Your Profile</Text>
+
+        {email && (
+          <View style={styles.emailContainer}>
+            <Ionicons name="mail" size={20} color="#FFD700" />
+            <Text style={styles.emailText}>{email}</Text>
+          </View>
+        )}
 
         {loading && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#FFD700" />
-            <Text style={styles.loadingText}>Creating Account...</Text>
+            <Text style={styles.loadingText}>Setting up your profile...</Text>
           </View>
         )}
 
         <TextInput
           style={styles.input}
-          placeholder="Full Name"
+          placeholder="Full Name *"
           placeholderTextColor="#B0BEC5"
           value={name}
           onChangeText={(text) => setName(text)}
@@ -216,20 +226,10 @@ export default function SignUp() {
           accessibilityLabel="Enter your full name"
           editable={!loading}
         />
+
         <TextInput
           style={styles.input}
-          placeholder="Email Address"
-          placeholderTextColor="#B0BEC5"
-          value={email}
-          onChangeText={(text) => setEmail(text.trim())}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          accessibilityLabel="Enter your email address"
-          editable={!loading}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Phone Number (10 digits)"
+          placeholder="Phone Number (10 digits) *"
           placeholderTextColor="#B0BEC5"
           value={phone}
           onChangeText={setPhone}
@@ -239,65 +239,9 @@ export default function SignUp() {
           editable={!loading}
         />
 
-        <View style={styles.passwordContainer}>
-          <TextInput
-            style={[styles.input, { flex: 1, marginBottom: 0 }]}
-            placeholder="Password (min 6 chars)"
-            placeholderTextColor="#B0BEC5"
-            secureTextEntry={!showPassword}
-            value={password}
-            onChangeText={setPassword}
-            accessibilityLabel="Enter your password"
-            editable={!loading}
-          />
-          <TouchableOpacity
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.eyeIcon}
-            accessibilityLabel={
-              showPassword ? "Hide password" : "Show password"
-            }
-            disabled={loading}
-          >
-            <Ionicons
-              name={showPassword ? "eye-off" : "eye"}
-              size={22}
-              color="#B0BEC5"
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.passwordContainer}>
-          <TextInput
-            style={[styles.input, { flex: 1, marginBottom: 0 }]}
-            placeholder="Confirm Password"
-            placeholderTextColor="#B0BEC5"
-            secureTextEntry={!showConfirmPassword}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            accessibilityLabel="Confirm your password"
-            editable={!loading}
-          />
-          <TouchableOpacity
-            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            style={styles.eyeIcon}
-            accessibilityLabel={
-              showConfirmPassword
-                ? "Hide confirm password"
-                : "Show confirm password"
-            }
-            disabled={loading}
-          >
-            <Ionicons
-              name={showConfirmPassword ? "eye-off" : "eye"}
-              size={22}
-              color="#B0BEC5"
-            />
-          </TouchableOpacity>
-        </View>
-
         <TextInput
           style={styles.input}
-          placeholder="Referral Code (optional)"
+          placeholder="Referral Code *"
           placeholderTextColor="#B0BEC5"
           value={referral}
           onChangeText={(text) =>
@@ -305,32 +249,27 @@ export default function SignUp() {
           }
           maxLength={8}
           autoCapitalize="characters"
-          accessibilityLabel="Enter referral code (optional)"
+          accessibilityLabel="Enter referral code"
           editable={!loading}
         />
 
         <Text style={styles.infoText}>
-          💡 You will receive a unique referral code after signup to earn
-          rewards!
+          💡 You will receive a unique referral code after completing your
+          profile to earn rewards!
         </Text>
 
         <TouchableOpacity
           style={[styles.button, loading && { opacity: 0.6 }]}
-          onPress={handleSignUp}
+          onPress={handleContinue}
           disabled={loading}
-          accessibilityLabel="Sign up for Trade Spark"
+          accessibilityLabel="Continue to dashboard"
         >
           <Text style={styles.buttonText}>
-            {loading ? "Creating Account..." : "Sign Up"}
+            {loading ? "Setting Up..." : "Continue"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>
-          Already have an account?{" "}
-          <Link href="/(auth)/signin">
-            <Text style={styles.link}>Login here</Text>
-          </Link>
-        </Text>
+        <Text style={styles.requiredText}>* All fields are required</Text>
       </View>
     </KeyboardAwareScrollView>
   );
@@ -355,7 +294,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#E0E0E0",
     textAlign: "center",
-    marginBottom: 30,
+    marginBottom: 20,
+  },
+  emailContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2A2A3E",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: "#FFD700",
+  },
+  emailText: {
+    color: "#E0E0E0",
+    fontSize: 16,
+    marginLeft: 10,
+    fontWeight: "600",
   },
   input: {
     backgroundColor: "#2A2A3E",
@@ -372,23 +328,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2A2A3E",
-    borderRadius: 10,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "#3A3A50",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  eyeIcon: {
-    paddingHorizontal: 15,
-  },
   infoText: {
     color: "#B0BEC5",
     fontSize: 14,
@@ -400,7 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFD700",
     padding: 15,
     borderRadius: 10,
-    marginBottom: 15,
+    marginBottom: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -413,15 +352,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 18,
   },
-  footer: {
+  requiredText: {
     textAlign: "center",
-    color: "#E0E0E0",
-    marginTop: 10,
-    fontSize: 16,
-  },
-  link: {
-    color: "#FFD700",
-    fontWeight: "600",
+    color: "#B0BEC5",
+    fontSize: 14,
+    fontStyle: "italic",
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -1,8 +1,8 @@
+// app/(auth)/signin.tsx
 import { Ionicons } from "@expo/vector-icons";
-import * as Google from "expo-auth-session/providers/google";
 import { Link, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -24,111 +24,143 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Google Auth Session
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: "your-web-client-id", // Replace with actual Google web client ID
-    iosClientId: "your-ios-client-id", // Replace with actual Google iOS client ID
-    androidClientId: "your-android-client-id", // Replace with actual Google Android client ID
-  });
-
-  // Handle Google Sign-In response
-  const handleGoogleLogin = useCallback(async (idToken: string) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithIdToken({
-        provider: "google",
-        token: idToken,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      router.replace("/(tabs)/Dashboard");
-    } catch (err: any) {
-      console.error("Google login error:", err);
-      Alert.alert(
-        "Error",
-        err.message || "Google login failed. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { id_token } = response.params;
-
-      if (!id_token) {
-        Alert.alert("Error", "No ID token received from Google.");
-        return;
-      }
-
-      handleGoogleLogin(id_token);
-    } else if (response?.type === "error") {
-      Alert.alert("Error", "Google authentication failed. Please try again.");
-    }
-  }, [response, handleGoogleLogin]);
-
-  // Email & Password login
   const handleLogin = useCallback(async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter email and password.");
       return;
     }
-
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw error;
 
+      console.log("✅ Login successful:", data.session?.user.email);
       router.replace("/(tabs)/Dashboard");
+
+      // AuthContext will handle the navigation automatically
     } catch (err: any) {
-      console.error("Login error:", err);
-      Alert.alert("Error", err.message || "Login failed. Please try again.");
+      Alert.alert("Error", err.message || "Login failed");
     } finally {
       setLoading(false);
     }
   }, [email, password]);
 
-  // Forgot Password handler
   const handleForgotPassword = useCallback(async () => {
     if (!email) {
       Alert.alert("Error", "Please enter your email to reset password.");
       return;
     }
-
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
-        {
-          redirectTo: "your-app-reset-password-url", // Replace with your app's reset URL or remove if not using deep links
-        }
+        { redirectTo: "tradeapp://reset-password" }
       );
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      if (error) throw error;
       Alert.alert("Success", "Check your email for the password reset link.");
     } catch (err: any) {
-      console.error("Reset password error:", err);
-      Alert.alert(
-        "Error",
-        err.message || "Failed to send reset link. Please try again."
-      );
+      Alert.alert("Error", err.message || "Failed to send reset link.");
     } finally {
       setLoading(false);
     }
   }, [email]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      setLoading(true);
+      const redirectTo = "exp://192.168.31.119:8081"; // Expo Go
+      const authUrl = `${
+        process.env.EXPO_PUBLIC_SUPABASE_URL
+      }/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
+        redirectTo
+      )}`;
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectTo);
+
+      if (result.type === "success" && result.url) {
+        const url = new URL(result.url);
+
+        // Expo Go: get access_token from hash
+        const access_token = url.hash.match(/access_token=([^&]*)/)?.[1];
+        const refresh_token = url.hash.match(/refresh_token=([^&]*)/)?.[1];
+
+        if (access_token && refresh_token) {
+          const { data: sessionData, error: sessionError } =
+            await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+
+          if (sessionError) throw sessionError;
+
+          // Check if user is new or existing
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (user) {
+            // Check user metadata to determine if it's a new user
+            // Supabase marks new users with created_at close to current time
+            const userCreatedAt = new Date(user.created_at).getTime();
+            const currentTime = Date.now();
+            const timeDifference = currentTime - userCreatedAt;
+
+            // If user was created less than 10 seconds ago, treat as new user
+            const isNewUser = timeDifference < 10000;
+
+            if (isNewUser) {
+              console.log(
+                "✅ New Google user - redirecting to GoogleSignin page"
+              );
+              router.replace("/(auth)/googleSignin");
+            } else {
+              console.log("✅ Existing Google user - redirecting to Dashboard");
+              router.replace("/(tabs)/Dashboard");
+            }
+          }
+        } else if (url.searchParams.get("code")) {
+          // Standalone app: exchange code for session
+          const { data, error } = await supabase.auth.exchangeCodeForSession(
+            result.url
+          );
+          if (error) throw error;
+
+          // Check if user is new or existing
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (user) {
+            const userCreatedAt = new Date(user.created_at).getTime();
+            const currentTime = Date.now();
+            const timeDifference = currentTime - userCreatedAt;
+
+            const isNewUser = timeDifference < 10000;
+
+            if (isNewUser) {
+              console.log(
+                "✅ New Google user - redirecting to GoogleSignin page"
+              );
+              router.replace("/(auth)/googleSignin");
+            } else {
+              console.log("✅ Existing Google user - redirecting to Dashboard");
+              router.replace("/(tabs)/Dashboard");
+            }
+          }
+        } else {
+          Alert.alert("Error", "No access token or code returned from Google.");
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Google login failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
 
   return (
     <KeyboardAwareScrollView
@@ -148,7 +180,6 @@ export default function SignIn() {
           </View>
         )}
 
-        {/* Email Input */}
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -157,10 +188,8 @@ export default function SignIn() {
           onChangeText={(text) => setEmail(text.trim())}
           autoCapitalize="none"
           keyboardType="email-address"
-          accessibilityLabel="Enter your email address"
         />
 
-        {/* Password Input */}
         <View style={styles.passwordContainer}>
           <TextInput
             style={[styles.input, { flex: 1, marginBottom: 0 }]}
@@ -169,14 +198,10 @@ export default function SignIn() {
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
-            accessibilityLabel="Enter your password"
           />
           <TouchableOpacity
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeIcon}
-            accessibilityLabel={
-              showPassword ? "Hide password" : "Show password"
-            }
           >
             <Ionicons
               name={showPassword ? "eye-off" : "eye"}
@@ -186,7 +211,6 @@ export default function SignIn() {
           </TouchableOpacity>
         </View>
 
-        {/* Forgot Password */}
         <TouchableOpacity
           onPress={handleForgotPassword}
           style={styles.forgotButton}
@@ -194,35 +218,25 @@ export default function SignIn() {
           <Text style={styles.forgot}>Forgot Password?</Text>
         </TouchableOpacity>
 
-        {/* Login Button */}
         <TouchableOpacity
           style={[styles.button, loading && { opacity: 0.6 }]}
           onPress={handleLogin}
           disabled={loading}
-          accessibilityLabel="Sign in to Trade Spark"
         >
           <Text style={styles.buttonText}>Sign In</Text>
         </TouchableOpacity>
 
         <Text style={styles.orText}>OR</Text>
 
-        {/* Google Login */}
         <TouchableOpacity
-          style={[styles.socialButton, loading && { opacity: 0.6 }]}
-          disabled={!request || loading}
-          onPress={() => promptAsync()}
-          accessibilityLabel="Sign in with Google"
+          style={styles.socialButton}
+          onPress={handleGoogleSignIn}
         >
           <Ionicons name="logo-google" size={20} color="#E0E0E0" />
           <Text style={styles.socialButtonText}>Continue with Google</Text>
         </TouchableOpacity>
 
-        {/* Phone Login */}
-        <TouchableOpacity
-          style={[styles.socialButton, loading && { opacity: 0.6 }]}
-          disabled={loading}
-          accessibilityLabel="Sign in with mobile number"
-        >
+        <TouchableOpacity style={styles.socialButton}>
           <Link href="/(auth)/PhoneLogin" style={styles.socialLink}>
             <Ionicons name="call" size={20} color="#E0E0E0" />
             <Text style={styles.socialButtonText}>
@@ -231,9 +245,8 @@ export default function SignIn() {
           </Link>
         </TouchableOpacity>
 
-        {/* Footer */}
         <Text style={styles.footer}>
-          Don’t have an account?{" "}
+          Dont have an account?{" "}
           <Link href="/(auth)/signup">
             <Text style={styles.link}>Sign Up</Text>
           </Link>
@@ -273,11 +286,6 @@ const styles = StyleSheet.create({
     color: "#E0E0E0",
     borderWidth: 1,
     borderColor: "#3A3A50",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
   },
   passwordContainer: {
     flexDirection: "row",
@@ -287,19 +295,9 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: "#3A3A50",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
   },
-  eyeIcon: {
-    paddingHorizontal: 15,
-  },
-  forgotButton: {
-    alignSelf: "flex-end",
-    marginBottom: 15,
-  },
+  eyeIcon: { paddingHorizontal: 15 },
+  forgotButton: { alignSelf: "flex-end", marginBottom: 15 },
   forgot: {
     color: "#FFD700",
     fontWeight: "600",
@@ -311,11 +309,6 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
   },
   buttonText: {
     color: "#1A1A2E",
@@ -334,16 +327,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#3A3A50",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
   },
-  socialLink: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  socialLink: { flexDirection: "row", alignItems: "center" },
   socialButtonText: {
     color: "#E0E0E0",
     fontWeight: "700",
@@ -362,10 +347,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  link: {
-    color: "#FFD700",
-    fontWeight: "600",
-  },
+  link: { color: "#FFD700", fontWeight: "600" },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(26, 26, 46, 0.8)",

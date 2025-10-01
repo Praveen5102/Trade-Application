@@ -33,10 +33,12 @@ export default function Wallet() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
 
-  const backendUrl = "http://192.168.31.119:5000";
+  const backendUrl = "https://abcd1234.ngrok.io"; // Replace with your ngrok or production URL
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
       fetchUserData();
     });
 
@@ -46,58 +48,78 @@ export default function Wallet() {
   }, []);
 
   const fetchUserData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setBalance(0);
-      setLoading(false);
-      return;
-    }
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setBalance(0);
+        setLoading(false);
+        Alert.alert("Error", "Not signed in");
+        return;
+      }
 
-    const { data: userData, error } = await supabase
-      .from("users")
-      .select("id")
-      .eq("auth_id", user.id)
-      .single();
+      const { data: userData, error } = await supabase
+        .from("users")
+        .select("id")
+        .eq("auth_id", user.id)
+        .single();
 
-    if (error || !userData) {
+      if (error || !userData) {
+        Alert.alert("Error", "Failed to load user data");
+        setLoading(false);
+        return;
+      }
+
+      setUserId(userData.id);
+      await fetchBalance(userData.id);
+      await fetchTransactions(userData.id);
+    } catch (err: any) {
+      console.error("Fetch user data error:", err);
       Alert.alert("Error", "Failed to load user data");
       setLoading(false);
-      return;
     }
-
-    setUserId(userData.id);
-    await fetchBalance(userData.id);
-    await fetchTransactions(userData.id);
   };
 
   const fetchBalance = async (uid: string) => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("wallets")
-      .select("balance")
-      .eq("user_id", uid)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("wallets")
+        .select("balance")
+        .eq("user_id", uid)
+        .single();
 
-    if (error) {
-      Alert.alert("Error", error.message);
-      setBalance(0);
-    } else {
-      setBalance(Number(data?.balance ?? 0));
+      if (error) {
+        Alert.alert("Error", error.message);
+        setBalance(0);
+      } else {
+        setBalance(Number(data?.balance ?? 0));
+      }
+    } catch (err: any) {
+      console.error("Fetch balance error:", err);
+      Alert.alert("Error", "Failed to load balance");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fetchTransactions = async (uid: string) => {
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      Alert.alert("Error", error.message);
-    } else {
-      setTransactions(data || []);
+      if (error) {
+        Alert.alert("Error", error.message);
+      } else {
+        setTransactions(data || []);
+      }
+    } catch (err: any) {
+      console.error("Fetch transactions error:", err);
+      Alert.alert("Error", "Failed to load transactions");
     }
   };
 
@@ -115,17 +137,19 @@ export default function Wallet() {
     }
 
     setModalVisible(false);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !userId) {
-      Alert.alert("Not signed in");
-      return;
-    }
-
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || !userId) {
+        Alert.alert("Error", "Not signed in");
+        return;
+      }
+
       setLoading(true);
 
       if (mode === "deposit") {
-        const resp = await fetch(`${backendUrl}/create-order`, {
+        const resp = await fetch(`${backendUrl}/api/create-order`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -139,7 +163,6 @@ export default function Wallet() {
         const data = await resp.json();
         if (!resp.ok) {
           Alert.alert("Error", data.error || "Failed to create order");
-          setLoading(false);
           return;
         }
 
@@ -151,11 +174,11 @@ export default function Wallet() {
         } else {
           Alert.alert("Error", "No payment link returned");
         }
-
       } else {
+        // Assuming RPC for withdrawal
         const { error } = await supabase.rpc("withdraw", {
-          user_uuid: user.id,
-          withdraw_amount: amount,
+          p_user_id: userId,
+          p_amount: amount,
         });
 
         if (error) throw error;
@@ -164,10 +187,9 @@ export default function Wallet() {
         await fetchTransactions(userId);
         Alert.alert("Success", `Withdrew ₹${amount.toFixed(2)}`);
       }
-
     } catch (err: any) {
-      console.error(err);
-      Alert.alert("Error", err?.message ?? "Unknown error");
+      console.error("Transaction error:", err);
+      Alert.alert("Error", err.message || "Transaction failed");
     } finally {
       setLoading(false);
     }
@@ -184,7 +206,7 @@ export default function Wallet() {
 
       try {
         setLoading(true);
-        const resp = await fetch(`${backendUrl}/verify-order`, {
+        const resp = await fetch(`${backendUrl}/api/verify-order`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId: pendingOrderId }),
@@ -196,12 +218,16 @@ export default function Wallet() {
             await fetchBalance(userId);
             await fetchTransactions(userId);
           }
-          Alert.alert("Deposit Successful", `₹${pendingAmount} added`);
+          Alert.alert(
+            "Deposit Successful",
+            `₹${pendingAmount?.toFixed(2)} added`
+          );
         } else {
           Alert.alert("Payment Not Confirmed", data.status || "Unknown");
         }
       } catch (err: any) {
-        Alert.alert("Error verifying payment", err?.message ?? String(err));
+        console.error("Verify payment error:", err);
+        Alert.alert("Error", "Failed to verify payment");
       } finally {
         setPendingOrderId(null);
         setPendingAmount(null);
@@ -226,28 +252,36 @@ export default function Wallet() {
     return (
       <View style={styles.containerCentered}>
         <Text style={styles.title}>Trade Spark</Text>
-        <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 20 }} />
+        <ActivityIndicator
+          size="large"
+          color="#FFD700"
+          style={{ marginTop: 20 }}
+        />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Balance Card */}
       <View style={styles.card}>
         <Text style={styles.balance}>Balance</Text>
         <Text style={styles.amount}>₹{balance.toFixed(2)}</Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={[styles.button, { backgroundColor: "#4CAF50" }]} onPress={() => openModal("deposit")}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: "#4CAF50" }]}
+            onPress={() => openModal("deposit")}
+          >
             <Text style={styles.buttonText}>Deposit</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.button, { backgroundColor: "#F44336" }]} onPress={() => openModal("withdrawal")}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: "#F44336" }]}
+            onPress={() => openModal("withdrawal")}
+          >
             <Text style={styles.buttonText}>Withdraw</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Transactions Card */}
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Transaction History</Text>
         <FlatList
@@ -256,20 +290,27 @@ export default function Wallet() {
           renderItem={({ item }) => (
             <View style={styles.transactionItem}>
               <Text style={styles.transactionType}>{item.type}</Text>
-              <Text style={styles.transactionAmount}>₹{item.amount.toFixed(2)}</Text>
+              <Text style={styles.transactionAmount}>
+                ₹{item.amount.toFixed(2)}
+              </Text>
               <Text style={styles.transactionStatus}>{item.status}</Text>
-              <Text style={styles.transactionDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
+              <Text style={styles.transactionDate}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </Text>
             </View>
           )}
-          ListEmptyComponent={<Text style={styles.emptyText}>No transactions yet</Text>}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No transactions yet</Text>
+          }
         />
       </View>
 
-      {/* Deposit/Withdrawal Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{mode === "deposit" ? "Deposit" : "Withdraw"}</Text>
+            <Text style={styles.modalTitle}>
+              {mode === "deposit" ? "Deposit" : "Withdraw"}
+            </Text>
             <TextInput
               value={amountText}
               onChangeText={setAmountText}
@@ -278,10 +319,16 @@ export default function Wallet() {
               style={styles.input}
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.button, { flex: 1, backgroundColor: "#4CAF50" }]} onPress={handleSubmit}>
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, backgroundColor: "#4CAF50" }]}
+                onPress={handleSubmit}
+              >
                 <Text style={styles.buttonText}>Confirm</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, { flex: 1, backgroundColor: "#6B7280" }]} onPress={() => setModalVisible(false)}>
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, backgroundColor: "#6B7280" }]}
+                onPress={() => setModalVisible(false)}
+              >
                 <Text style={styles.buttonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -294,24 +341,100 @@ export default function Wallet() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: "#121212" },
-  containerCentered: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#121212" },
+  containerCentered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#121212",
+  },
   title: { fontSize: 32, fontWeight: "bold", color: "#FFD700" },
-  card: { backgroundColor: "#1E1E1E", borderRadius: 15, padding: 20, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 10 },
+  card: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 10,
+  },
   balance: { color: "#B0BEC5", fontSize: 16, marginBottom: 5 },
-  amount: { color: "#BB86FC", fontSize: 32, fontWeight: "bold", marginBottom: 20 },
-  buttonRow: { flexDirection: "row", justifyContent: "space-between", width: "100%" },
-  button: { paddingVertical: 12, borderRadius: 10, alignItems: "center", flex: 1, marginHorizontal: 5 },
+  amount: {
+    color: "#BB86FC",
+    fontSize: 32,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  button: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    flex: 1,
+    marginHorizontal: 5,
+  },
   buttonText: { color: "#FFF", fontSize: 16, fontWeight: "600" },
-  sectionTitle: { color: "#FFD700", fontSize: 20, fontWeight: "bold", marginBottom: 15 },
-  transactionItem: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#2C2C2C" },
+  sectionTitle: {
+    color: "#FFD700",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 15,
+  },
+  transactionItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2C2C2C",
+  },
   transactionType: { color: "#E0E0E0", fontSize: 14 },
   transactionAmount: { color: "#BB86FC", fontSize: 14 },
   transactionStatus: { color: "#4CAF50", fontSize: 14 },
   transactionDate: { color: "#B0BEC5", fontSize: 12 },
   emptyText: { color: "#B0BEC5", textAlign: "center", marginTop: 10 },
-  modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.7)" },
-  modalContent: { width: "90%", backgroundColor: "#1E1E1E", padding: 20, borderRadius: 15, alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 10 },
-  modalTitle: { color: "#FFD700", fontSize: 20, fontWeight: "700", marginBottom: 15 },
-  modalActions: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 15 },
-  input: { width: "100%", borderWidth: 1, borderColor: "#3A3A3A", backgroundColor: "#2C2C2C", padding: 12, borderRadius: 10, color: "#E0E0E0", marginBottom: 15 },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.7)",
+  },
+  modalContent: {
+    width: "90%",
+    backgroundColor: "#1E1E1E",
+    padding: 20,
+    borderRadius: 15,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  modalTitle: {
+    color: "#FFD700",
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 15,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 15,
+  },
+  input: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#3A3A3A",
+    backgroundColor: "#2C2C2C",
+    padding: 12,
+    borderRadius: 10,
+    color: "#E0E0E0",
+    marginBottom: 15,
+  },
 });

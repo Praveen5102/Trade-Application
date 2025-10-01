@@ -43,7 +43,7 @@ export default function Dashboard() {
   const [pendingAmount, setPendingAmount] = useState<number | null>(null);
   const [fetchedUserId, setFetchedUserId] = useState<string | null>(null);
 
-  const backendUrl = "http://192.168.31.119:5000";
+  const backendUrl = "http://192.168.31.119:5000"; // Or update to production URL
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -210,9 +210,10 @@ export default function Dashboard() {
         setLoading(false);
       } else {
         setLoading(true);
+        // Assuming a RPC for withdrawal to handle validation, deduction, transaction
         const { error } = await supabase.rpc("withdraw", {
-          user_uuid: user.id,
-          withdraw_amount: amount,
+          p_user_id: fetchedUserId, // Use internal user_id
+          p_amount: amount,
         });
         if (error) throw error;
         await fetchBalance(fetchedUserId);

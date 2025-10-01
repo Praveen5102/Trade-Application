@@ -36,11 +36,17 @@ type Depth = {
 
 type Position = {
   id: string;
+  user_id: string;
   symbol: string;
   quantity: number;
   entry_price: number;
   current_price: number;
+  status: string;
+  opened_at: string;
+  closed_at?: string;
+  realized_pl?: number;
   created_at: string;
+  updated_at: string;
 };
 
 export default function Trade() {
@@ -301,7 +307,7 @@ export default function Trade() {
           quantity: qtyNum,
           entry_price: priceNum,
           current_price: priceNum,
-          created_at: new Date().toISOString(),
+          status: "active",
         });
 
         if (error) throw error;

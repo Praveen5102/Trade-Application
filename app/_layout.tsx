@@ -1,33 +1,10 @@
+// app/_layout.tsx
 import { Stack } from "expo-router";
-import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { supabase } from "./lib/supabase";
+import { AuthProvider, useAuth } from "./lib/AuthContext";
 
-export default function RootLayout() {
-  const [loading, setLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    const checkSession = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setIsLoggedIn(!!user);
-      setLoading(false);
-
-      const { data: listener } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          setIsLoggedIn(!!session);
-        }
-      );
-
-      return () => listener.subscription.unsubscribe();
-    };
-
-    checkSession();
-  }, []);
+function RootLayoutNav() {
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -44,12 +21,16 @@ export default function RootLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {isLoggedIn ? (
-        <Stack.Screen name="(tabs)" /> // Logged in
-      ) : (
-        <Stack.Screen name="(auth)" /> // Not logged in
-      )}
+      {user ? <Stack.Screen name="(tabs)" /> : <Stack.Screen name="(auth)" />}
     </Stack>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
   );
 }
 

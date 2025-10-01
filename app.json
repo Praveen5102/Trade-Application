@@ -2,15 +2,16 @@
   "expo": {
     "name": "TradeApp",
     "slug": "TradeApp",
+    "owner": "john1912",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/favicon.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "tradeapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "jsEngine": "hermes",
     "splash": {
-      "image": "./assets/images/favicon.png",
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#1A1A2E"
     },
@@ -18,30 +19,19 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.john1912.TradeApp",
       "splash": {
-        "image": "./assets/images/favicon.png",
+        "image": "./assets/images/splash.png",
         "resizeMode": "contain",
-        "backgroundColor": "#1A1A2E",
-        "dark": {
-          "image": "./assets/images/favicon.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#1A1A2E"
-        }
-      },
-      "associatedDomains": ["applinks:api.mytradeapp.com"]
+        "backgroundColor": "#1A1A2E"
+      }
     },
     "android": {
       "package": "com.john1912.TradeApp",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "splash": {
-        "image": "./assets/images/favicon.png",
+        "image": "./assets/images/splash.png",
         "resizeMode": "contain",
-        "backgroundColor": "#1A1A2E",
-        "dark": {
-          "image": "./assets/images/favicon.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#1A1A2E"
-        }
+        "backgroundColor": "#1A1A2E"
       },
       "intentFilters": [
         {
@@ -56,12 +46,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png",
-      "splash": {
-        "image": "./assets/images/favicon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#1A1A2E"
-      }
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -75,7 +60,8 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -83,10 +69,6 @@
     },
     "extra": {
       "API_URL": "http://192.168.31.119:5000",
-      "router": {},
-      "iosClientId": "783926729709-aicrpppf7d7av0j2tea07angabhfm2fl.apps.googleusercontent.com",
-      "androidClientId": "783926729709-sgisflqjj7o8dllpnuh9n55vg28fnqip.apps.googleusercontent.com",
-      "webClientId": "783926729709-1k7tpg3dsbfmdp7k7bn22ngg17pl0rr4o.apps.googleusercontent.com",
       "eas": {
         "projectId": "a46a7536-1529-4fa6-88e0-b2c0c8d9baad"
       }
